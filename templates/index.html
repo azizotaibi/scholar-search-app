@@ -1,0 +1,345 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Scholar Search with Author Tags</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .search-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background-color: #fafafa;
+        }
+        
+        .search-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        button {
+            padding: 12px 20px;
+            background-color: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #3367d6;
+        }
+        
+        .tag-filter {
+            margin-top: 15px;
+        }
+        
+        .tag-checkbox {
+            display: inline-block;
+            margin: 5px 10px 5px 0;
+        }
+        
+        .paper {
+            border: 1px solid #ddd;
+            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 8px;
+            background-color: white;
+        }
+        
+        .paper-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1a0dab;
+            margin-bottom: 10px;
+        }
+        
+        .authors {
+            margin-bottom: 10px;
+        }
+        
+        .author {
+            display: inline-block;
+            margin: 2px 5px;
+            padding: 5px 8px;
+            background-color: #f0f0f0;
+            border-radius: 15px;
+            position: relative;
+        }
+        
+        .author-tags {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .tag {
+            background-color: #4285f4;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            margin: 0 2px;
+            font-size: 11px;
+        }
+        
+        .matching-tag {
+            background-color: #34a853;
+        }
+        
+        .cited-by {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .snippet {
+            color: #333;
+            line-height: 1.4;
+        }
+        
+        .tag-management {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
+        
+        .add-tag-form {
+            display: none;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .error {
+            color: #d93025;
+            background-color: #fce8e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        
+        .results-header {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e8f0fe;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Google Scholar Search with Author Tags</h1>
+        
+        <div class="search-section">
+            <div class="search-row">
+                <input type="text" id="titleInput" placeholder="Enter paper title..." />
+                <button onclick="search()">Search</button>
+            </div>
+            
+            <div class="tag-filter">
+                <strong>Filter by author tags:</strong>
+                <div id="tagCheckboxes"></div>
+            </div>
+        </div>
+        
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let allTags = [];
+        
+        // Load available tags on page load
+        window.onload = function() {
+            loadTags();
+        };
+        
+        function loadTags() {
+            fetch('/tags')
+                .then(response => response.json())
+                .then(tags => {
+                    allTags = tags;
+                    updateTagCheckboxes();
+                })
+                .catch(error => console.error('Error loading tags:', error));
+        }
+        
+        function updateTagCheckboxes() {
+            const container = document.getElementById('tagCheckboxes');
+            container.innerHTML = '';
+            
+            allTags.forEach(tag => {
+                const label = document.createElement('label');
+                label.className = 'tag-checkbox';
+                label.innerHTML = `
+                    <input type="checkbox" value="${tag}" onchange="search()"> ${tag}
+                `;
+                container.appendChild(label);
+            });
+        }
+        
+        function getSelectedTags() {
+            const checkboxes = document.querySelectorAll('#tagCheckboxes input[type="checkbox"]:checked');
+            return Array.from(checkboxes).map(cb => cb.value);
+        }
+        
+        function search() {
+            const title = document.getElementById('titleInput').value.trim();
+            const selectedTags = getSelectedTags();
+            
+            if (!title) {
+                document.getElementById('results').innerHTML = '<div class="error">Please enter a paper title</div>';
+                return;
+            }
+            
+            document.getElementById('results').innerHTML = '<div class="loading">Searching...</div>';
+            
+            fetch('/search', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    title: title,
+                    tags: selectedTags
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    document.getElementById('results').innerHTML = `<div class="error">${data.error}</div>`;
+                    return;
+                }
+                displayResults(data.papers, data.total);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('results').innerHTML = '<div class="error">An error occurred while searching</div>';
+            });
+        }
+        
+        function displayResults(papers, total) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (papers.length === 0) {
+                resultsDiv.innerHTML = '<div class="results-header">No papers found</div>';
+                return;
+            }
+            
+            let html = `<div class="results-header">Found ${total} papers</div>`;
+            
+            papers.forEach((paper, index) => {
+                html += `
+                    <div class="paper">
+                        <div class="paper-title">${escapeHtml(paper.title)}</div>
+                        <div class="authors">
+                            ${paper.authors.map(author => `
+                                <div class="author">
+                                    <strong>${escapeHtml(author.name)}</strong>
+                                    <div class="author-tags">
+                                        ${author.tags.map(tag => 
+                                            `<span class="tag ${paper.matching_authors && 
+                                             paper.matching_authors.find(ma => ma.name === author.name)?.matching_tags?.includes(tag) ? 
+                                             'matching-tag' : ''}">${escapeHtml(tag)}</span>`
+                                        ).join('')}
+                                    </div>
+                                    <div class="tag-management">
+                                        <button onclick="showAddTagForm(${index}, '${escapeHtml(author.name)}')">Add Tag</button>
+                                        <div id="addTagForm_${index}_${author.name.replace(/[^a-zA-Z0-9]/g, '_')}" class="add-tag-form">
+                                            <input type="text" placeholder="New tag" onkeypress="handleTagKeyPress(event, ${index}, '${escapeHtml(author.name)}')">
+                                            <button onclick="addTag('${escapeHtml(author.name)}', document.querySelector('#addTagForm_${index}_${author.name.replace(/[^a-zA-Z0-9]/g, '_')} input').value)">Add</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                        <div class="cited-by">Cited by: ${paper.cited_by}</div>
+                        <div class="snippet">${escapeHtml(paper.snippet)}</div>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function showAddTagForm(paperIndex, authorName) {
+            const formId = `addTagForm_${paperIndex}_${authorName.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const form = document.getElementById(formId);
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function handleTagKeyPress(event, paperIndex, authorName) {
+            if (event.key === 'Enter') {
+                const input = event.target;
+                addTag(authorName, input.value);
+            }
+        }
+        
+        function addTag(author, tag) {
+            if (!tag.trim()) return;
+            
+            fetch('/add_tag', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    author: author,
+                    tag: tag.trim()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadTags(); // Reload tags
+                    search(); // Refresh search results
+                }
+            })
+            .catch(error => console.error('Error adding tag:', error));
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // Allow searching with Enter key
+        document.getElementById('titleInput').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                search();
+            }
+        });
+    </script>
+</body>
+</html>
